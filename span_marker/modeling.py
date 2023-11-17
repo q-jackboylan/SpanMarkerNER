@@ -88,7 +88,12 @@ class SpanMarkerModel(PreTrainedModel):
             self.dropout = nn.Identity()
         # TODO: Get a less arbitrary default
         hidden_size = self.config.get("hidden_size", default=768)
-        self.classifier = nn.Linear(hidden_size * 2, self.config.num_labels)
+
+        self.enhancing_hidden_states = self.config.get("enhancing_hidden_states", default=False)
+        if self.enhancing_hidden_states:
+            self.classifier = nn.Linear(hidden_size * 4, self.config.num_labels)
+        else:
+            self.classifier = nn.Linear(hidden_size * 2, self.config.num_labels)
         self.loss_func = nn.CrossEntropyLoss()
 
         # tokenizer and data collator are filled using set_tokenizer
@@ -156,7 +161,19 @@ class SpanMarkerModel(PreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
         )
-        last_hidden_state = outputs[0]
+
+        if self.enhancing_hidden_states:
+            # import ipdb; ipdb.set_trace()
+            # for better quality
+            last_hidden_state = torch.cat(
+                (outputs.hidden_states[-1], outputs.hidden_states[-7]),
+                dim=2
+            )
+        else:
+            last_hidden_state = outputs[0]
+        if len(outputs) > 2:
+            outputs = outputs[:-1]
+
         last_hidden_state = self.dropout(last_hidden_state)
 
         batch_size = last_hidden_state.size(0)
@@ -187,11 +204,13 @@ class SpanMarkerModel(PreTrainedModel):
 
         # NOTE: This was wrong in the older tests
         feature_vector = self.dropout(feature_vector)
-        logits = self.classifier(feature_vector)
 
+        logits = self.classifier(feature_vector)
+        
         if labels is not None:
             loss = self.loss_func(logits.view(-1, self.config.num_labels), labels.view(-1))
 
+        # import ipdb; ipdb.set_trace()
         return SpanMarkerOutput(
             loss=loss if labels is not None else None,
             logits=logits,
@@ -254,6 +273,10 @@ class SpanMarkerModel(PreTrainedModel):
         config: PretrainedConfig = config or AutoConfig.from_pretrained(
             pretrained_model_name_or_path, *model_args, **kwargs
         )
+
+        if 'enhancing_hidden_states' in kwargs:
+            config.enhancing_hidden_states = True
+            kwargs["output_hidden_states"] = True
 
         # if 'pretrained_model_name_or_path' refers to a SpanMarkerModel instance, initialize it directly
         loading_span_marker = isinstance(config, cls.config_class)
