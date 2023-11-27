@@ -122,8 +122,8 @@ class SpacySpanMarkerWrapper:
         if isinstance(stream, str):
             stream = [stream]
 
-        if not isinstance(stream, types.GeneratorType):
-            stream = self.nlp.pipe(stream, batch_size=batch_size)
+        # if not isinstance(stream, types.GeneratorType):
+        #     stream = self.nlp.pipe(stream, batch_size=batch_size)
 
         for docs in minibatch(stream, size=batch_size):
             inputs = [
